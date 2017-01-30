@@ -24,7 +24,7 @@ RSpec.configure do |config|
     Split.configuration = Split::Configuration.new
     Split.redis = fakeredis
     Split.redis.flushall
-    @ab_user = mock_user
+    @adapter = mock_user
     params = nil
   end
 end

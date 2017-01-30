@@ -148,7 +148,7 @@ describe Split::Dashboard do
     post "/experiment?experiment=#{experiment.name}", :alternative => 'red'
 
     expect(last_response).to be_redirect
-    expect(experiment.winner.name).to eq('red')
+    expect(Split::ExperimentCatalog.find(experiment.name).winner.name).to eq('red')
   end
 
   it "should display the start date" do

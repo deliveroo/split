@@ -15,6 +15,8 @@ module Split
 
     def initialize(name, options = {})
       options = DEFAULT_OPTIONS.merge(options)
+      @catalog = options.delete(:catalog)
+      @catalog ||= Split::ExperimentCatalog.new
 
       @name = name.to_s
 
@@ -83,8 +85,11 @@ module Split
         Split.redis.sadd(:experiments, name)
         start unless Split.configuration.start_manually
         @alternatives.reverse.each {|a| Split.redis.lpush(name, a.name)}
+        @catalog.add_experiment_exists(name)
         goals_collection.save
         save_metadata
+        Split.redis.hset(experiment_config_key, :resettable, resettable)
+        Split.redis.hset(experiment_config_key, :algorithm, algorithm.to_s)
       else
         existing_alternatives = load_alternatives_from_redis
         existing_goals = Split::GoalsCollection.new(@name).load_from_redis
@@ -101,8 +106,6 @@ module Split
         end
       end
 
-      Split.redis.hset(experiment_config_key, :resettable, resettable)
-      Split.redis.hset(experiment_config_key, :algorithm, algorithm.to_s)
       self
     end
 
@@ -115,7 +118,7 @@ module Split
     end
 
     def new_record?
-      !Split.redis.exists(name)
+      !@catalog.experiment_exists(name)
     end
 
     def ==(obj)
@@ -149,7 +152,7 @@ module Split
     end
 
     def winner
-      if w = Split.redis.hget(:experiment_winner, name)
+      if w = @catalog.winner(name)
         Split::Alternative.new(w, name)
       else
         nil
@@ -162,6 +165,7 @@ module Split
 
     def winner=(winner_name)
       Split.redis.hset(:experiment_winner, name, winner_name.to_s)
+      @catalog.clear_winners
     end
 
     def participant_count
@@ -174,14 +178,16 @@ module Split
 
     def reset_winner
       Split.redis.hdel(:experiment_winner, name)
+      @catalog.clear_winners
     end
 
     def start
       Split.redis.hset(:experiment_start_times, @name, Time.now.to_i)
+      @catalog.clear_start_times
     end
 
     def start_time
-      t = Split.redis.hget(:experiment_start_times, @name)
+      t = @catalog.start_time(@name)
       if t
         # Check if stored time is an integer
         if t =~ /^[-+]?[0-9]+$/
@@ -248,11 +254,14 @@ module Split
       Split.configuration.on_before_experiment_delete.call(self)
       if Split.configuration.start_manually
         Split.redis.hdel(:experiment_start_times, @name)
+        @catalog.clear_start_times
       end
       alternatives.each(&:delete)
       reset_winner
       Split.redis.srem(:experiments, name)
       Split.redis.del(name)
+      @catalog.clear_experiment_exists(name)
+      @catalog.clear_experiment_config(experiment_config_key)
       goals_collection.delete
       delete_metadata
       Split.configuration.on_experiment_delete.call(self)
@@ -264,7 +273,7 @@ module Split
     end
 
     def load_from_redis
-      exp_config = Split.redis.hgetall(experiment_config_key)
+      exp_config = @catalog.experiment_config(experiment_config_key)
 
       options = {
         resettable: exp_config['resettable'],
@@ -422,6 +431,7 @@ module Split
     end
 
     def load_metadata_from_redis
+      return load_metadata_from_configuration if Split.configuration.experiment_for(@name)
       meta = Split.redis.get(metadata_key)
       JSON.parse(meta) unless meta.nil?
     end
@@ -437,6 +447,12 @@ module Split
     end
 
     def load_alternatives_from_redis
+      if Split.configuration.experiment_for(@name)
+        alternatives = load_alternatives_from_configuration
+        return alternatives if alternatives.first.is_a? String
+        return alternatives.map(&:keys).flatten
+      end
+
       case Split.redis.type(@name)
       when 'set' # convert legacy sets to lists
         alts = Split.redis.smembers(@name)

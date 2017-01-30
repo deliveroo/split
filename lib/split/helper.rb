@@ -5,10 +5,11 @@ module Split
 
     def ab_test(metric_descriptor, control = nil, *alternatives)
       begin
-        experiment = ExperimentCatalog.find_or_initialize(metric_descriptor, control, *alternatives)
+        catalog = ExperimentCatalog.new
+        experiment = catalog.find_or_initialize(metric_descriptor, control, *alternatives)
         alternative = if Split.configuration.enabled
           experiment.save
-          trial = Trial.new(:user => ab_user, :experiment => experiment,
+          trial = Trial.new(:user => ab_user(catalog), :experiment => experiment,
               :override => override_alternative(experiment.name), :exclude => exclude_visitor?,
               :disabled => split_generically_disabled?)
           alt = trial.choose!(self)
@@ -34,6 +35,25 @@ module Split
       else
         alternative
       end
+    end
+
+    def ab_tests(tests, catalog=nil)
+      catalog ||= ExperimentCatalog.new
+      results = tests.map do |test|
+        experiment = catalog.find_or_initialize(test)
+        alternative = if Split.configuration.enabled
+          experiment.save
+          trial = Trial.new(:user => ab_user(catalog), :experiment => experiment,
+              :override => override_alternative(experiment.name), :exclude => exclude_visitor?,
+              :disabled => split_generically_disabled?)
+          alt = trial.choose!(self)
+          alt ? alt.name : nil
+        else
+          control_variable(experiment.control)
+        end
+        [test, alternative]
+      end
+      Hash[results]
     end
 
     def reset!(experiment)
@@ -98,8 +118,12 @@ module Split
       alternative_name
     end
 
-    def ab_user
-      @ab_user ||= User.new(self)
+    def ab_user(catalog=nil)
+      User.new(self, adapter, catalog)
+    end
+
+    def adapter
+      @adapter ||= Split::Persistence.adapter.new(self)
     end
 
     def exclude_visitor?

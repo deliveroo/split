@@ -4,13 +4,14 @@ module Split
     def_delegators :@user, :keys, :[], :[]=, :delete
     attr_reader :user
 
-    def initialize(context, adapter=nil)
+    def initialize(context, adapter=nil, catalog=nil)
       @user = adapter || Split::Persistence.adapter.new(context)
+      @catalog = catalog || Split::ExperimentCatalog.new
     end
 
     def cleanup_old_experiments!
       keys_without_finished(user.keys).each do |key|
-        experiment = ExperimentCatalog.find key_without_version(key)
+        experiment = @catalog.find key_without_version(key)
         if experiment.nil? || experiment.has_winner? || experiment.start_time.nil?
           user.delete key
           user.delete Experiment.finished_key(key)

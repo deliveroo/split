@@ -7,6 +7,7 @@ module Split
     end
 
     def load_from_redis
+      return load_from_configuration if Split.configuration.experiment_for(@experiment_name)
       Split.redis.lrange(goals_key, 0, -1)
     end
 
