@@ -48,8 +48,8 @@ module Split
     # Choose an alternative, add a participant, and save the alternative choice on the user. This
     # method is guaranteed to only run once, and will skip the alternative choosing process if run
     # a second time.
-    def choose!(context = nil)
-      @user.cleanup_old_experiments!
+    def choose!(context = nil, skip_cleanup=false)
+      @user.cleanup_old_experiments! unless skip_cleanup
       # Only run the process once
       return alternative if @alternative_choosen
 

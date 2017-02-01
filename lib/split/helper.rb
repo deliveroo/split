@@ -39,20 +39,22 @@ module Split
 
     def ab_tests(tests, catalog=nil)
       catalog ||= ExperimentCatalog.new
+      user = ab_user(catalog)
       results = tests.map do |test|
         experiment = catalog.find_or_initialize(test)
         alternative = if Split.configuration.enabled
           experiment.save
-          trial = Trial.new(:user => ab_user(catalog), :experiment => experiment,
+          trial = Trial.new(:user => user, :experiment => experiment,
               :override => override_alternative(experiment.name), :exclude => exclude_visitor?,
               :disabled => split_generically_disabled?)
-          alt = trial.choose!(self)
+          alt = trial.choose!(self, skip_cleanup: true)
           alt ? alt.name : nil
         else
           control_variable(experiment.control)
         end
         [test, alternative]
       end
+      user.cleanup_old_experiments!
       Hash[results]
     end
 
