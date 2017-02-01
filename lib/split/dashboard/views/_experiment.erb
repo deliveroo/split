@@ -57,14 +57,16 @@
         <td><%= alternative.completed_count(goal) %></td>
         <td>
           <%= number_to_percentage(alternative.conversion_rate(goal)) %>%
-          <% if experiment.control.conversion_rate(goal) > 0 && !alternative.control? %>
-            <% if alternative.conversion_rate(goal) > experiment.control.conversion_rate(goal) %>
+          <% control_conversion_rate = experiment.control.conversion_rate(goal) %>
+          <% alternative_conversion_rate = alternative.conversion_rate(goal) %>
+          <% if control_conversion_rate > 0 && !alternative.control? %>
+            <% if alternative_conversion_rate > control_conversion_rate %>
               <span class='better'>
-                +<%= number_to_percentage((alternative.conversion_rate(goal)/experiment.control.conversion_rate(goal))-1) %>%
+                +<%= number_to_percentage((alternative_conversion_rate/control_conversion_rate)-1) %>%
               </span>
-            <% elsif alternative.conversion_rate(goal) < experiment.control.conversion_rate(goal) %>
+            <% elsif alternative_conversion_rate < control_conversion_rate %>
               <span class='worse'>
-                <%= number_to_percentage((alternative.conversion_rate(goal)/experiment.control.conversion_rate(goal))-1) %>%
+                <%= number_to_percentage((alternative_conversion_rate/control_conversion_rate)-1) %>%
               </span>
             <% end  %>
           <% end %>
@@ -86,7 +88,7 @@
           <div class="box-<%=experiment.jstring(goal)%> probability-<%=experiment.jstring(goal)%>">
             <span title="p_winner: <%= round(alternative.p_winner(goal), 3) %>"><%= number_to_percentage(round(alternative.p_winner(goal), 3)) %>%</span>
           </div>
-        </td>        
+        </td>
         <td>
           <% if experiment.has_winner? %>
             <% if experiment.winner.name == alternative.name %>
