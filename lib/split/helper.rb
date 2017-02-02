@@ -36,6 +36,25 @@ module Split
       end
     end
 
+    def ab_tests(tests)
+      results = tests.map do |test|
+        experiment = ExperimentCatalog.find_or_initialize(test)
+        alternative = if Split.configuration.enabled
+          experiment.save
+          trial = Trial.new(:user => ab_user, :experiment => experiment,
+              :override => override_alternative(experiment.name), :exclude => exclude_visitor?,
+              :disabled => split_generically_disabled?)
+          alt = trial.choose!(self, true)
+          alt ? alt.name : nil
+        else
+          control_variable(experiment.control)
+        end
+        [test, alternative]
+      end
+      ab_user.cleanup_old_experiments!
+      Hash[results]
+    end
+
     def reset!(experiment)
       ab_user.delete(experiment.key)
     end
