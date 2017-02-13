@@ -3,7 +3,7 @@ module Split
   module Helper
     module_function
 
-    def ab_test(metric_descriptor, control = nil, *alternatives)
+    def ab_test(metric_descriptor, control = nil, *alternatives, **options)
       begin
         experiment = ExperimentCatalog.find_or_initialize(metric_descriptor, control, *alternatives)
         alternative = if Split.configuration.enabled
@@ -11,7 +11,7 @@ module Split
           trial = Trial.new(:user => ab_user, :experiment => experiment,
               :override => override_alternative(experiment.name), :exclude => exclude_visitor?,
               :disabled => split_generically_disabled?)
-          alt = trial.choose!(self)
+          alt = trial.choose!(self, options.fetch(:skip_cleanup, false))
           alt ? alt.name : nil
         else
           control_variable(experiment.control)
